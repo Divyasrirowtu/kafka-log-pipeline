@@ -10,7 +10,7 @@ services:
     ports:
       - "2181:2181"
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      test: ["CMD", "bash", "-c", "nc -z localhost 9092"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,10 +44,29 @@ services:
       kafka:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
+    command: >
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic application-logs --partitions 1 --replication-factor 1 --config retention.ms=86400000 &&
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic audit-logs --partitions 1 --replication-factor 1 --config retention.ms=7776000000 --config segment.bytes=536870912 &&
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic trace-groups --partitions 1 --replication-factor 1 &&
       kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic log-alerts --partitions 1 --replication-factor 1
-      "s
+
+  web-api:
+    build: ./services/web-api
+    container_name: web-api
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  worker:
+    build: ./services/worker
+    container_name: worker
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  db-proxy:
+    build: ./services/db-proxy
+    container_name: db-proxy
+    depends_on:
+      kafka:
+        condition: service_healthy
